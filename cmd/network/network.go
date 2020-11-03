@@ -10,7 +10,7 @@ import (
 
 type Node interface {
 	Run(*sync.WaitGroup)
-	GetInInterfaceL() []*NetworkInterface
+	GetInterfaceL() []*NetworkInterface
 	Str() string
 }
 
