@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -21,19 +21,19 @@ var protSLength = 1
 //Wrapper class for a queue of packets
 // param maxsize - the max size of the queue storing packets
 type NetworkInterface struct {
-	muIn  sync.Mutex
-	muOut sync.Mutex
-	QueueIn  []string
-	QueueOut []string
+	muIn       sync.Mutex
+	muOut      sync.Mutex
+	QueueIn    []string
+	QueueOut   []string
 	MaxQueSize int
 }
 
 func NewNetworkInterface(maxQ int) *NetworkInterface {
 	return &NetworkInterface{
-		muIn:      sync.Mutex{},
+		muIn:       sync.Mutex{},
 		muOut:      sync.Mutex{},
-		QueueIn: []string{},
-		QueueOut: []string{},
+		QueueIn:    []string{},
+		QueueOut:   []string{},
 		MaxQueSize: maxQ,
 	}
 }
@@ -115,8 +115,8 @@ func (n *NetworkInterface) Put(pkt, inORout string, block bool) error {
 	}
 	n.muOut.Lock()
 	defer n.muOut.Unlock()
-	if len(n.QueuOt) < n.MaxQueSize {
-		n.QueuOt = append(n.QueuOt, pkt)
+	if len(n.QueueOut) < n.MaxQueSize {
+		n.QueueOut = append(n.QueueOut, pkt)
 		return nil
 	}
 
@@ -128,13 +128,13 @@ func (n *NetworkInterface) Put(pkt, inORout string, block bool) error {
 // DataS: packet payload
 // DstAddrStrLength: packet encoding lengths
 type NetworkPacket struct {
-	DstAddr          int
+	DstAddr          string
 	DataS            string
 	ProtS            string
 	DstAddrStrLength int
 }
 
-func NewNetworkPacket(dstAddr int, protS, dataS string) *NetworkPacket {
+func NewNetworkPacket(dstAddr, protS, dataS string) *NetworkPacket {
 	return &NetworkPacket{
 		DstAddr:          dstAddr,
 		DataS:            dataS,
@@ -144,53 +144,55 @@ func NewNetworkPacket(dstAddr int, protS, dataS string) *NetworkPacket {
 }
 
 func (np *NetworkPacket) Str() string {
-	return np.ToByteS()
+	byteS := fmt.Sprintf("%0*s", np.DstAddrStrLength, np.DstAddr)
+	byteS += np.ProtS
+	byteS += np.DataS
+	return byteS
 }
 
 //ToBytesS converts packet to a byte string for transmission over links
 func (np *NetworkPacket) ToByteS() (string, error) {
-	byteS := fmt.Sprintf("%0*s", np.DstAddrStrLength, strconv.Itoa(np.DstAddr))
+	byteS := fmt.Sprintf("%0*s", np.DstAddrStrLength, np.DstAddr)
 	if np.ProtS == "data" {
 		byteS += "1"
 	} else if np.ProtS == "control" {
 		byteS += "2"
 	} else {
-		return "", fmt.Errorf("%s: unknown protS option: %s\n", np.Str(), np.ProtS))
+		return "", fmt.Errorf("%s: unknown protS option: %s\n", np.Str(), np.ProtS)
 	}
 
 	byteS += np.DataS
-	return byteS
+	return byteS, nil
 	//seqNumS := fmt.Sprintf("%0*s", p.SeqNumSlength, strconv.Itoa(p.SeqNum))
 }
 
 //FromByteS builds a packet object from a byte string
 // Returns error if it cannot convert addres to int
 func FromByteS(byteS string) (*NetworkPacket, error) {
-	dstAddr, err := strconv.Atoi(byteS[0:dstAddrStrLength])
-	if err != nil {
-		log.Println("Error converting addr to string")
-		return nil, err
-	}
-	protS = byteS[dstAddrStrLength:dstAddrStrLength+protSLength]
+	dstAddr := strings.TrimLeftFunc(byteS[0:dstAddrStrLength], func(r rune) bool {
+		return r == '0'
+	})
+
+	protS := byteS[dstAddrStrLength : dstAddrStrLength+protSLength]
 	if protS == "1" {
 		protS = "data"
 	} else if protS == "2" {
 		protS = "control"
 	} else {
-		return "", fmt.Errorf("Unknown protS option: %s\n", protS))
+		return nil, fmt.Errorf("Unknown protS option: %s\n", protS)
 	}
 
-	dataS := byteS[dstAddrStrLength + protSLength:]
+	dataS := byteS[dstAddrStrLength+protSLength:]
 	return NewNetworkPacket(dstAddr, protS, dataS), nil
 }
 
 //Host implements a network host for receiving and transmitting data
 // Addr: address of this node represented as an integer
 type Host struct {
-	Addr          int
-	InterfaceL  []*NetworkInterface
+	Addr       string
+	InterfaceL []*NetworkInterface
 	// OutInterfaceL []*NetworkInterface
-	Stop          chan interface{}
+	Stop chan interface{}
 }
 
 func (h *Host) GetInterfaceL() []*NetworkInterface {
@@ -205,28 +207,33 @@ func (h *Host) GetInterfaceL() []*NetworkInterface {
 // 	return h.OutInterfaceL
 // }
 
-func NewHost(addr int, maxQSize int) *Host {
+func NewHost(addr string, maxQSize int) *Host {
 	return &Host{
-		Addr:          addr,
-		InterfaceL:  []*NetworkInterface{NewNetworkInterface(maxQSize)},
-		Stop:          make(chan interface{}, 1),
+		Addr:       addr,
+		InterfaceL: []*NetworkInterface{NewNetworkInterface(maxQSize)},
+		Stop:       make(chan interface{}, 1),
 	}
 }
 
 // Called when printing the objects
 func (h *Host) Str() string {
-	return fmt.Sprintf("Host_%d", h.Addr)
+	return fmt.Sprintf("Host_%s", h.Addr)
 }
 
 //UdtSend creates a packet and enqueues for transmission
 // dst_addr: destination address for the packet
 // data_S: data being transmitted to the network layer
-func (h *Host) UdtSend(dstAddr int, dataS string) {
-	p := NewNetworkPacket(dstAddr, dataS)
+func (h *Host) UdtSend(dstAddr string, dataS string) {
+	p := NewNetworkPacket(dstAddr, "data", dataS)
 
-	fmt.Printf("%s: sending packet \"%s\"\n", h.Str(), p.ToByteS())
+	fmt.Printf("%s: sending packet \"%s\"\n", h.Str(), p.Str())
 
-	err := h.InterfaceL[0].Put(p.ToByteS(), "out", false) // send packets always enqueued successfully
+	pktByts, err := p.ToByteS()
+	if err != nil {
+		log.Println("Could not convert packet to bytes in udtsend, err: ", err)
+	}
+
+	err = h.InterfaceL[0].Put(pktByts, "out", false) // send packets always enqueued successfully
 	if err != nil {
 		fmt.Println("err from put in UDTsent: ", err)
 	}
@@ -265,11 +272,11 @@ func (h *Host) Run(wg *sync.WaitGroup) {
 // Name: friendly router nam for debugging
 // costD: cost table to neighbors {neighbor: {interface: cost}}
 type Router struct {
-	Stop          chan interface{}
-	Name          string
-	InterfaceL  []*NetworkInterface
-	CostD	map[string]map[int]int
-	RtTableD map[string]map[int]int
+	Stop       chan interface{}
+	Name       string
+	InterfaceL []*NetworkInterface
+	CostD      map[string]map[int]int
+	RtTableD   map[string]map[int]int
 }
 
 //NewRouter returns a new router with given specs
@@ -277,17 +284,17 @@ type Router struct {
 // maxQueSize: max queue legth (passed to interfacess)
 
 // rounter needs to implement packet segmentation is packet is too big for interface
-func NewRouter(name string, costD, interfaceCount int, maxQueSize int) *Router {
-	in := make([]*NetworkInterface, interfaceCount)
-	for i := 0; i < interfaceCount; i++ {
+func NewRouter(name string, costD map[string]map[int]int, maxQueSize int) *Router {
+	in := make([]*NetworkInterface, len(costD))
+	for i := 0; i < len(costD); i++ {
 		in[i] = NewNetworkInterface(maxQueSize)
 	}
 
 	return &Router{
-		Stop:          make(chan interface{}, 1),
-		Name:          name,
-		InterfaceL:  in,
-		CostD: costD,
+		Stop:       make(chan interface{}, 1),
+		Name:       name,
+		InterfaceL: in,
+		CostD:      costD,
 	}
 }
 
@@ -304,32 +311,30 @@ func (rt *Router) Str() string {
 	return fmt.Sprintf("Router_%s", rt.Name)
 }
 
-func (rt *Router) PrintRoutes(){
+func (rt *Router) PrintRoutes() {
 	// TODO print the routes as a two dimensional table
 	fmt.Println(rt.RtTableD)
 }
 
-//lok through the content of incoming interfaces and forward to appropriate outgoing interfaces
+//look through the content of incoming interfaces and forward to appropriate outgoing interfaces
 func (rt *Router) processQueues() {
 	for i, v := range rt.InterfaceL {
-		//pktS := ""
 
-		// TRYE
 		// get packet from interface i
 		if pktS, err := v.Get("in"); err == nil {
 			//fmt.Println("in routher forward, packet from Get(): ", pktS)
 			// if packet exists make a forwarding decision
 			p, err := FromByteS(pktS)
 			if err != nil {
-				log.Println("Could not get packet")
+				log.Println("Could not get packet: ", err)
 				continue
 			}
 
-			if p.ProtS == "data"{
+			if p.ProtS == "data" {
 				rt.forwardPacket(p, i)
-			} else if p.protS == "control"{
-				rt.updateRoutes(p,i)
-			} else{
+			} else if p.ProtS == "control" {
+				rt.UpdateRoutes(p, i)
+			} else {
 				// Raise Error
 				log.Printf("%s: unknown packet type in packet %s\n", rt.Str(), p.Str())
 			}
@@ -339,37 +344,46 @@ func (rt *Router) processQueues() {
 	}
 }
 
+func (rt *Router) forwardPacket(p *NetworkPacket, i int) {
+	// HERE you will need to implement a lookup into the
+	// forwarding table to find the appropriate outgoing interface
+	// for now we assume the outgoing interface is 1
+	byteS, err := p.ToByteS()
+	if err != nil {
+		log.Println("Could not convert packet to bytes: ", err)
+		return
+	}
+	if err := rt.InterfaceL[1].Put(byteS, "out", true); err != nil {
+		//log.Printf("Could not put packet %s in router %s, into outInterface %d. Error: %s", p.str, rt.forward, i, err)
+		log.Printf("%s: packet '%s' lost on interface %d\n", rt.Str(), p.Str(), i)
+	}
 
-func (rt *Router) forwardPacket(p *NetworkPacket, i int){
-			// HERE you will need to implement a lookup into the
-			// forwarding table to find the appropriate outgoing interface
-			// for now we assume the outgoing interface is 1
-			if err = rt.InterfaceL[1].Put(p.ToByteS(), "out", true); err != nil {
-				//log.Printf("Could not put packet %s in router %s, into outInterface %d. Error: %s", p.str, rt.forward, i, err)
-				log.Printf("%s: packet '%s' lost on interface %d\n", rt.Str(), p.Str(), i)
-			}
-			
-			fmt.Printf("%s: forwarding packet %s from interface %d to %d\n", rt.Str(), p.Str(), i, 1)
+	fmt.Printf("%s: forwarding packet %s from interface %d to %d\n", rt.Str(), p.Str(), i, 1)
 }
 
 //SendRoutes will send out route updates
 //	param i: Interface number on which to send out routing update
-func (rt *Router) SendRoutes(i int){
+func (rt *Router) SendRoutes(i int) {
 	// TODO: Send out a routing table update
-	
+
 	// create a routing table update packet
-	p := NewNetworkPacket(0, "control", "DUMMY_ROUTING_TABLE")
+	p := NewNetworkPacket("H0", "control", "DUMMY_ROUTING_TABLE")
 
 	fmt.Printf("%s: sending routing update \"%s\" from interface %d\n", rt.Str(), p.Str(), i)
 
-	if err := rt.InterfaceL[i].Put(p.ToByteS(), "out", true); err != nil{
+	byteS, err := p.ToByteS()
+	if err != nil {
+		log.Println("Could not convert packet to bytes in sendRoutes: ", err)
+		return
+	}
+	if err := rt.InterfaceL[i].Put(byteS, "out", true); err != nil {
 		fmt.Printf("%s: packet \"%s\" lost on interface %d\n", rt.Str(), p.Str(), i)
 	}
 }
 
 //UpdateRoutes forwards the packet according to the routing table
 // param p: packet containing routing information
-func (rt *Router) UpdateRoutes(p *NetworkPacket, i int){
+func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 	// TODO: add logic to update the routing tables and possibly send out routing updates
 	fmt.Printf("%s: Received routing update %s from interface %d\n", rt.Str(), p.Str(), i)
 
