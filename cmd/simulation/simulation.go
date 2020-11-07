@@ -32,16 +32,16 @@ func main() {
 	objectL = append(objectL, host2)
 
 	//Create Routers
-	costDRouterA := make(map[string]map[int]int)
-	costDRouterA["H1"] = map[int]int{0:1}
-	costDRouterA["RB"] = map[int]int{1:1}
+	costDRouterA := make(map[string][2]int)
+	costDRouterA["H1"] = [2]int{0,1}
+	costDRouterA["RB"] = [2]int{1,1}
 	routerA := network.NewRouter("RA", costDRouterA, routerQueueSize)
 	objectL = append(objectL, routerA)
 
 
-	costDRouterB := make(map[string]map[int]int)
-	costDRouterB["H2"] = map[int]int{1:3}
-	costDRouterB["RA"] = map[int]int{0:1}
+	costDRouterB := make(map[string][2]int)
+	costDRouterB["H2"] = [2]int{1,3}
+	costDRouterB["RA"] = [2]int{0,1}
 	routerB := network.NewRouter("RB", costDRouterB, routerQueueSize)
 	objectL = append(objectL, routerB)
 

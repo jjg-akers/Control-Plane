@@ -275,7 +275,7 @@ type Router struct {
 	Stop       chan interface{}
 	Name       string
 	InterfaceL []*NetworkInterface
-	CostD      map[string]map[int]int
+	CostD      map[string][2]int
 	RtTableD   map[string]map[int]int
 }
 
@@ -284,11 +284,105 @@ type Router struct {
 // maxQueSize: max queue legth (passed to interfacess)
 
 // rounter needs to implement packet segmentation is packet is too big for interface
-func NewRouter(name string, costD map[string]map[int]int, maxQueSize int) *Router {
+func NewRouter(name string, costD map[string][2]int, maxQueSize int) *Router {
 	in := make([]*NetworkInterface, len(costD))
 	for i := 0; i < len(costD); i++ {
 		in[i] = NewNetworkInterface(maxQueSize)
 	}
+
+	// fmt.Println("name: ", name)
+	// fmt.Println("costd: ", costD)
+
+	// set up the routing table for connected hosts
+	// determine what initial routing table should be, then print it
+	//  RA	RA	H1	RB
+	//	RA	0	1	1
+	//	RB	i	i	i
+
+	// tbl := map[string][]string{
+	// 	"self": []string{name},
+	// 	name:   []string{"0"},
+	// }
+
+	tbl := map[string]map[string]int{
+		"self": map[string]int{
+			name: 0,
+		},
+		name: map[string]int{
+			name: 0,
+		},
+	}
+
+	// fmt.Println("table: ", tbl)
+
+	for n, c := range costD {
+		// fmt.Println("n: ", n)
+		// fmt.Println("c: ", c)
+		// tbl["self"] = map[string]int{
+		// 	n: c[1],
+		// }
+		for nm, innerTble := range tbl {
+			// fmt.Printf("router type: %T\n", innerTble)
+			//fmt.Println("innertable: ", innerTble)
+			if nm != name {
+				innerTble[n] = 100
+			} else {
+				innerTble[n] = c[1]
+			}
+		}
+
+		if strings.ToUpper(string(n[0])) == "R" {
+			// janky way to determine if router or host
+			tbl[n] = make(map[string]int)
+			for i := range tbl["self"] {
+				tbl[n][i] = 100
+			}
+		}
+	}
+
+	// fmt.Println("table2: ", tbl)
+
+	fmt.Printf("   %-3s  |", name)
+	for i := range tbl["self"] {
+		fmt.Printf("   %-3s  |", i)
+	}
+
+	fmt.Println("")
+	fmt.Println("------------------------------------")
+
+	for i, v := range tbl {
+
+		// fmt.Printf(" %s ", i)
+		if i == "self" {
+			// for i1, _ := range v {
+			// 	fmt.Printf(" %s ", i1)
+			// }
+
+			// fmt.Println("")
+			continue
+		}
+		fmt.Printf("   %-3s  |", i)
+
+		for _, v1 := range v {
+			fmt.Printf("   %-3d  |", v1)
+		}
+
+		fmt.Println("")
+		fmt.Println("------------------------------------")
+	}
+
+	// build intial table
+	// for n, c := range costD {
+	// 	tbl[n] = []string{strconv.Itoa(c[1])}
+
+	// 	if strings.ToUpper(n[0]) == "R"{
+	// 		// janky way to determine if router or host
+	// 		for dest, cost := range tble
+	// 		tbl["self"] = append()
+	// 	}
+	// }
+
+	//fmt.Println("TABLE: ", tbl)
 
 	return &Router{
 		Stop:       make(chan interface{}, 1),
@@ -301,10 +395,6 @@ func NewRouter(name string, costD map[string]map[int]int, maxQueSize int) *Route
 func (rt *Router) GetInterfaceL() []*NetworkInterface {
 	return rt.InterfaceL
 }
-
-// func (rt *Router) GetOutInterfaceL() []*NetworkInterface {
-// 	return rt.OutInterfaceL
-// }
 
 //Called when printing the object
 func (rt *Router) Str() string {
