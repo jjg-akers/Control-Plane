@@ -5,15 +5,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jjg-akers/Control-Plane/cmd/link"
-	"github.com/jjg-akers/Control-Plane/cmd/network"
+	link "github.com/jjg-akers/Control-Plane/cmd/link/link1"
+	network "github.com/jjg-akers/Control-Plane/cmd/network/network1"
 )
 
 //Settings
 var (
 	hostQueueSize   = 1000
 	routerQueueSize = 1000 // 0 means unlimited
-	simulationTime  = 2    // give the network sufficient time to transfer all packets before quitting
+	simulationTime  = 5    // give the network sufficient time to transfer all packets before quitting
 	wg              = sync.WaitGroup{}
 )
 
@@ -33,15 +33,14 @@ func main() {
 
 	//Create Routers
 	costDRouterA := make(map[string][2]int)
-	costDRouterA["H1"] = [2]int{0,1}
-	costDRouterA["RB"] = [2]int{1,1}
+	costDRouterA["H1"] = [2]int{0, 1}
+	costDRouterA["RB"] = [2]int{1, 1}
 	routerA := network.NewRouter("RA", costDRouterA, routerQueueSize)
 	objectL = append(objectL, routerA)
 
-
 	costDRouterB := make(map[string][2]int)
-	costDRouterB["H2"] = [2]int{1,3}
-	costDRouterB["RA"] = [2]int{0,1}
+	costDRouterB["H2"] = [2]int{1, 3}
+	costDRouterB["RA"] = [2]int{0, 1}
 	routerB := network.NewRouter("RB", costDRouterB, routerQueueSize)
 	objectL = append(objectL, routerB)
 
@@ -53,7 +52,6 @@ func main() {
 	linkLayer.AddLink(link.NewLink(host1, 0, routerA, 0))
 	linkLayer.AddLink(link.NewLink(routerA, 1, routerB, 0))
 	linkLayer.AddLink(link.NewLink(routerB, 1, host2, 0))
-
 
 	// start all the objects
 	for _, obj := range objectL {
@@ -72,23 +70,21 @@ func main() {
 	}
 
 	// compute routing tables
-	routerA.SendRoutes(1)	// one update starts the routing procss
+	routerA.SendRoutes(1) // one update starts the routing procss
 	time.Sleep(time.Duration(simulationTime) * time.Second)
 
-	fmt.Println("converged routing tables")
-	for _, obj := range objectL{
+	fmt.Println("CONVERGED ROUTING TABLES:")
+	for _, obj := range objectL {
 		switch v := obj.(type) {
 		case *network.Router:
 			v.PrintRoutes()
 		default:
 		}
 	}
-	
+
 	// send packet form host 1 to host 2
 	host1.UdtSend("H2", "MESSAGE_FROM_H!")
 	time.Sleep(time.Duration(simulationTime) * time.Second)
-
-
 
 	// create some events
 	// i := 0

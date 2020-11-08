@@ -1,6 +1,7 @@
 package network
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -276,7 +277,7 @@ type Router struct {
 	Name       string
 	InterfaceL []*NetworkInterface
 	CostD      map[string][2]int
-	RtTableD   map[string]map[int]int
+	RtTableD   map[string]map[string]int
 }
 
 //NewRouter returns a new router with given specs
@@ -290,19 +291,11 @@ func NewRouter(name string, costD map[string][2]int, maxQueSize int) *Router {
 		in[i] = NewNetworkInterface(maxQueSize)
 	}
 
-	// fmt.Println("name: ", name)
-	// fmt.Println("costd: ", costD)
-
 	// set up the routing table for connected hosts
 	// determine what initial routing table should be, then print it
 	//  RA	RA	H1	RB
 	//	RA	0	1	1
 	//	RB	i	i	i
-
-	// tbl := map[string][]string{
-	// 	"self": []string{name},
-	// 	name:   []string{"0"},
-	// }
 
 	tbl := map[string]map[string]int{
 		"self": map[string]int{
@@ -313,17 +306,9 @@ func NewRouter(name string, costD map[string][2]int, maxQueSize int) *Router {
 		},
 	}
 
-	// fmt.Println("table: ", tbl)
-
 	for n, c := range costD {
-		// fmt.Println("n: ", n)
-		// fmt.Println("c: ", c)
-		// tbl["self"] = map[string]int{
-		// 	n: c[1],
-		// }
 		for nm, innerTble := range tbl {
-			// fmt.Printf("router type: %T\n", innerTble)
-			//fmt.Println("innertable: ", innerTble)
+
 			if nm != name {
 				innerTble[n] = 100
 			} else {
@@ -340,56 +325,17 @@ func NewRouter(name string, costD map[string][2]int, maxQueSize int) *Router {
 		}
 	}
 
-	// fmt.Println("table2: ", tbl)
-
-	fmt.Printf("   %-3s  |", name)
-	for i := range tbl["self"] {
-		fmt.Printf("   %-3s  |", i)
-	}
-
-	fmt.Println("")
-	fmt.Println("------------------------------------")
-
-	for i, v := range tbl {
-
-		// fmt.Printf(" %s ", i)
-		if i == "self" {
-			// for i1, _ := range v {
-			// 	fmt.Printf(" %s ", i1)
-			// }
-
-			// fmt.Println("")
-			continue
-		}
-		fmt.Printf("   %-3s  |", i)
-
-		for _, v1 := range v {
-			fmt.Printf("   %-3d  |", v1)
-		}
-
-		fmt.Println("")
-		fmt.Println("------------------------------------")
-	}
-
-	// build intial table
-	// for n, c := range costD {
-	// 	tbl[n] = []string{strconv.Itoa(c[1])}
-
-	// 	if strings.ToUpper(n[0]) == "R"{
-	// 		// janky way to determine if router or host
-	// 		for dest, cost := range tble
-	// 		tbl["self"] = append()
-	// 	}
-	// }
-
-	//fmt.Println("TABLE: ", tbl)
-
-	return &Router{
+	r := &Router{
 		Stop:       make(chan interface{}, 1),
 		Name:       name,
 		InterfaceL: in,
 		CostD:      costD,
+		RtTableD:   tbl,
 	}
+
+	//r.PrintRoutes()
+
+	return r
 }
 
 func (rt *Router) GetInterfaceL() []*NetworkInterface {
@@ -403,7 +349,42 @@ func (rt *Router) Str() string {
 
 func (rt *Router) PrintRoutes() {
 	// TODO print the routes as a two dimensional table
-	fmt.Println(rt.RtTableD)
+	fmt.Println("")
+	//fmt.Println("")
+
+	t := []string{}
+
+	//fmt.Println("table2: ", tbl)
+
+	header := fmt.Sprintf("   %-3s  |", rt.Name)
+	for i := range rt.RtTableD["self"] {
+		header += fmt.Sprintf("   %-3s  |", i)
+		t = append(t, i)
+	}
+
+	fmt.Println(strings.Repeat("-", len(header)))
+
+	fmt.Println(header)
+
+	//fmt.Println("")
+	fmt.Println(strings.Repeat("-", len(header)))
+
+	for i, v := range rt.RtTableD {
+
+		// fmt.Printf(" %s ", i)
+		if i == "self" {
+
+			continue
+		}
+		fmt.Printf("   %-3s  |", i)
+
+		for _, v1 := range t {
+			fmt.Printf("   %-3d  |", v[v1])
+		}
+
+		fmt.Println("")
+		fmt.Println(strings.Repeat("-", len(header)))
+	}
 }
 
 //look through the content of incoming interfaces and forward to appropriate outgoing interfaces
@@ -456,8 +437,23 @@ func (rt *Router) forwardPacket(p *NetworkPacket, i int) {
 func (rt *Router) SendRoutes(i int) {
 	// TODO: Send out a routing table update
 
+	//	RtTableD   map[string]map[string]int
+
+	// create a new map from:route vector
+	vect := map[string]map[string]int{
+		rt.Name: rt.RtTableD[rt.Name],
+	}
+	//r, err := json.Marshal(rt.RtTableD[rt.Name])
+	r, err := json.Marshal(vect)
+
+	if err != nil {
+		fmt.Println("error calling json masharl")
+	}
+
+	//fmt.Println("mashalled vector: ", string(r))
+
 	// create a routing table update packet
-	p := NewNetworkPacket("H0", "control", "DUMMY_ROUTING_TABLE")
+	p := NewNetworkPacket("H0", "control", string(r))
 
 	fmt.Printf("%s: sending routing update \"%s\" from interface %d\n", rt.Str(), p.Str(), i)
 
@@ -477,6 +473,86 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 	// TODO: add logic to update the routing tables and possibly send out routing updates
 	fmt.Printf("%s: Received routing update %s from interface %d\n", rt.Str(), p.Str(), i)
 
+	//	CostD      map[string][2]int
+	//	RtTableD   map[string]map[string]int
+
+	// Dx(y) = min { C(x,v) + Dv(y), Dx(y) } for each node y ∈ N
+
+	// incomingNode : dest:cost, dest:cost ...
+	var vect map[string]map[string]int
+
+	if err := json.Unmarshal([]byte(p.DataS), &vect); err != nil {
+		fmt.Println("error unmarsahlling: ", err)
+	}
+
+	// check for new destinations and import incoming cost vector into routers existing table
+	incoming := ""
+	for i, v := range vect {
+		//fmt.Println("incoming vect: ", i)
+		incoming = i
+		for dest, cost := range v {
+
+			// check if dest in current cost table
+			if _, ok := rt.RtTableD["self"][dest]; !ok {
+
+				// add new dest
+				for router, d := range rt.RtTableD {
+					if router != "self" || router != rt.Name {
+						d[dest] = 100
+					} else {
+						d[dest] = cost
+					}
+				}
+			}
+			rt.RtTableD[i][dest] = cost
+		}
+
+	}
+
+	costToIncoming := rt.RtTableD[rt.Name][incoming]
+
+	updated := false
+
+	for dest, cost := range rt.RtTableD[rt.Name] {
+		// i = dest, v = cost
+
+		if dest == rt.Name || dest == incoming {
+			// don't need to update values of self or direct link to incoming
+			continue
+		}
+
+		// compare values (cost to incoming + cost from incoming to dest) < current cost to dest
+		if v, ok := vect[incoming][dest]; ok {
+			if (costToIncoming + v) < cost {
+
+				// update
+				rt.RtTableD[rt.Name][dest] = costToIncoming + v
+
+				updated = true
+
+			}
+		}
+	}
+
+	if updated {
+		fmt.Println("ROUTES UPDATED: ", updated)
+
+		// send routes to all neighbors
+		//	CostD      map[string][2]int
+		for neighbor := range rt.RtTableD {
+			if neighbor != "self" && neighbor != rt.Name {
+				//look up interface
+				if intf, ok := rt.CostD[neighbor]; ok {
+					fmt.Printf("sending routes to neighbor: %s via interface: %d\n", neighbor, intf[0])
+					rt.SendRoutes(intf[0])
+				} else {
+					log.Printf("ERROR, neighbor not found. Router: %s, neighbor: %s\n", rt.Name, neighbor)
+				}
+			}
+		}
+
+		//rt.PrintRoutes()
+	}
 }
 
 func (rt *Router) Run(wg *sync.WaitGroup) {

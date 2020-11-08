@@ -5,7 +5,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/jjg-akers/Control-Plane/cmd/network"
+	network "github.com/jjg-akers/Control-Plane/cmd/network/network1"
 )
 
 //Creates a link between two objects by looking up and linking node interfaces
@@ -32,12 +32,7 @@ func NewLink(node1 network.Node, node1Intf int, node2 network.Node, node2Intf in
 		Node1Interface: node1Intf,
 		Node2:          node2,
 		Node2Interface: node2Intf,
-		// InIntf:      fromHost.GetOutInterfaceL()[fromIntfNum],
-		// OutIntf:     toNode.GetInInterfaceL()[toIntfNum],
 	}
-
-	// toReturn.InIntf.Mtu = mtu
-	// toReturn.OutIntf.Mtu = mtu
 
 	return &toReturn
 }
@@ -84,33 +79,6 @@ func (lk *Link) TxPkt() {
 			fmt.Printf("%s: direction %s-%d -> %s-%d: transmitting packet %s\n", lk.Str(), nodeA.Str(), nodeAIntf, nodeB.Str(), nodeBIntf, pktS)
 		}
 	}
-
-	// //fmt.Println("tranmit packet called")
-	// pktS, err := lk.InIntf.Get()
-	// if err != nil {
-	// 	//log.Println("no packet to transmit")
-	// 	//time.Sleep(time.Second)
-
-	// 	return // no packet to transmit
-	// }
-	// if len(pktS) > lk.InIntf.Mtu {
-	// 	fmt.Printf("%s: packet '%s' length greater than the From interface MTU (%d)\n", lk.str(), pktS, lk.InIntf.Mtu)
-	// 	return // packet too big, return without transmitting
-	// }
-
-	// if len(pktS) > lk.OutIntf.Mtu {
-	// 	fmt.Printf("%s: packet '%s' length greater than the To interface MTU (%d)\n", lk.str(), pktS, lk.OutIntf.Mtu)
-	// 	return // packet too big, return without transmitting
-	// }
-
-	// // Transmit packet
-	// if err := lk.OutIntf.Put(pktS, false); err != nil {
-	// 	fmt.Printf("%s: packet lost\n", lk.str())
-	// 	return
-	// }
-
-	// fmt.Printf("%s: transmitting packet '%s'\n", lk.str(), pktS)
-	// //time.Sleep(time.Second)
 }
 
 //LinkLayer is a list of links in the network
