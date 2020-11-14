@@ -82,10 +82,19 @@ func main() {
 		}
 	}
 
-	// send packet form host 1 to host 2
-	host1.UdtSend("H2", "MESSAGE_FROM_H!")
-	time.Sleep(time.Duration(simulationTime) * time.Second)
+	// fmt.Println("Start sending messages")
+	// fmt.Println("")
 
+	// // send packet form host 1 to host 2
+	// host1.UdtSend("H2", "MESSAGE_FROM_H1")
+	// time.Sleep(2 * time.Second)
+	// host2.UdtSend("H1", "MESSAGE_FROM_H2")
+	// time.Sleep(2 * time.Second)
+
+	// fmt.Println("")
+
+	// fmt.Println("done sending messages")
+	// fmt.Println("")
 	// create some events
 	// i := 0
 	// for i < 3 {

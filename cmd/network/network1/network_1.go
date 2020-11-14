@@ -278,6 +278,7 @@ type Router struct {
 	InterfaceL []*NetworkInterface
 	CostD      map[string][2]int
 	RtTableD   map[string]map[string]int
+	IntfTable  map[string]int
 }
 
 //NewRouter returns a new router with given specs
@@ -297,6 +298,9 @@ func NewRouter(name string, costD map[string][2]int, maxQueSize int) *Router {
 	//	RA	0	1	1
 	//	RB	i	i	i
 
+	// interface table will keep track of which interface to send on for the shortest route
+	interfaceTable := make(map[string]int)
+
 	tbl := map[string]map[string]int{
 		"self": map[string]int{
 			name: 0,
@@ -307,6 +311,9 @@ func NewRouter(name string, costD map[string][2]int, maxQueSize int) *Router {
 	}
 
 	for n, c := range costD {
+
+		interfaceTable[n] = c[0]
+
 		for nm, innerTble := range tbl {
 
 			if nm != name {
@@ -331,9 +338,11 @@ func NewRouter(name string, costD map[string][2]int, maxQueSize int) *Router {
 		InterfaceL: in,
 		CostD:      costD,
 		RtTableD:   tbl,
+		IntfTable:  interfaceTable,
 	}
 
-	//r.PrintRoutes()
+	fmt.Println("starting table for router: ", r.Name)
+	r.PrintRoutes()
 
 	return r
 }
@@ -418,18 +427,24 @@ func (rt *Router) processQueues() {
 func (rt *Router) forwardPacket(p *NetworkPacket, i int) {
 	// HERE you will need to implement a lookup into the
 	// forwarding table to find the appropriate outgoing interface
+
+	intf := rt.IntfTable[p.DstAddr]
+
+	fmt.Println("DEST INterface: ", intf)
+
 	// for now we assume the outgoing interface is 1
 	byteS, err := p.ToByteS()
 	if err != nil {
 		log.Println("Could not convert packet to bytes: ", err)
 		return
 	}
-	if err := rt.InterfaceL[1].Put(byteS, "out", true); err != nil {
+
+	fmt.Printf("%s: forwarding packet %s from interface %d to %d\n", rt.Str(), p.Str(), i, intf)
+	if err := rt.InterfaceL[intf].Put(byteS, "out", true); err != nil {
 		//log.Printf("Could not put packet %s in router %s, into outInterface %d. Error: %s", p.str, rt.forward, i, err)
 		log.Printf("%s: packet '%s' lost on interface %d\n", rt.Str(), p.Str(), i)
 	}
 
-	fmt.Printf("%s: forwarding packet %s from interface %d to %d\n", rt.Str(), p.Str(), i, 1)
 }
 
 //SendRoutes will send out route updates
@@ -473,6 +488,9 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 	// TODO: add logic to update the routing tables and possibly send out routing updates
 	fmt.Printf("%s: Received routing update %s from interface %d\n", rt.Str(), p.Str(), i)
 
+	// fmt.Println("routing table before update")
+	// rt.PrintRoutes()
+
 	//	CostD      map[string][2]int
 	//	RtTableD   map[string]map[string]int
 
@@ -485,6 +503,10 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 		fmt.Println("error unmarsahlling: ", err)
 	}
 
+	// fmt.Println("incoming: ", vect)
+
+	updated := false
+
 	// check for new destinations and import incoming cost vector into routers existing table
 	incoming := ""
 	for i, v := range vect {
@@ -495,12 +517,28 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 			// check if dest in current cost table
 			if _, ok := rt.RtTableD["self"][dest]; !ok {
 
+				// fmt.Println("incoming: ", incoming)
+				// fmt.Println("costD: ", rt.CostD)
+				// fmt.Println("rt table before: ", rt.IntfTable)
+				// fmt.Println("setting interface table: ", rt.CostD[i][0])
+				rt.IntfTable[dest] = rt.CostD[i][0]
+
+				// fmt.Println("rt table after: ", rt.IntfTable)
+
+				updated = true
+
 				// add new dest
 				for router, d := range rt.RtTableD {
-					if router != "self" || router != rt.Name {
+					if router != "self" && router != rt.Name {
 						d[dest] = 100
 					} else {
-						d[dest] = cost
+						// fmt.Println("setting new destination")
+						// cost should be cost to incoming + cost from incoming to new dest
+						d[dest] = cost + d[i]
+
+						// set the new entry in interface lookup table - should go through
+						//	which ever interface reaches the current incoming vector
+
 					}
 				}
 			}
@@ -509,9 +547,10 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 
 	}
 
-	costToIncoming := rt.RtTableD[rt.Name][incoming]
+	// rt.PrintRoutes()
 
-	updated := false
+	// update cost table
+	costToIncoming := rt.RtTableD[rt.Name][incoming]
 
 	for dest, cost := range rt.RtTableD[rt.Name] {
 		// i = dest, v = cost
@@ -528,6 +567,11 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 				// update
 				rt.RtTableD[rt.Name][dest] = costToIncoming + v
 
+				//update interface routing table
+				rt.IntfTable[dest] = rt.CostD[incoming][0]
+
+				fmt.Println("updating cost and interface routing table: ", rt.IntfTable)
+
 				updated = true
 
 			}
@@ -535,7 +579,7 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 	}
 
 	if updated {
-		fmt.Println("ROUTES UPDATED: ", updated)
+		//fmt.Println("ROUTES UPDATED: ", updated)
 
 		// send routes to all neighbors
 		//	CostD      map[string][2]int
