@@ -429,7 +429,7 @@ func (rt *Router) forwardPacket(p *NetworkPacket, i int) {
 
 	intf := rt.IntfTable[p.DstAddr]
 
-	fmt.Println("DEST INterface: ", intf)
+	//fmt.Println("DEST INterface: ", intf)
 
 	// for now we assume the outgoing interface is 1
 	byteS, err := p.ToByteS()
@@ -531,7 +531,7 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 					if router != "self" && router != rt.Name {
 						d[dest] = 100
 					} else {
-						fmt.Println("setting new destination")
+						//fmt.Println("setting new destination")
 						// cost should be cost to incoming + cost from incoming to new dest
 						d[dest] = cost + d[i]
 
@@ -578,7 +578,7 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 	}
 
 	if updated {
-		fmt.Println("ROUTES UPDATED: ", updated)
+		fmt.Println("")
 
 		// send routes to all neighbors
 		//	CostD      map[string][2]int

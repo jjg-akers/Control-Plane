@@ -535,7 +535,7 @@ func (rt *Router) UpdateRoutes(p *NetworkPacket, i int) {
 	}
 
 	if updated {
-		fmt.Println("ROUTES UPDATED: ", updated)
+		fmt.Println("")
 
 		// send routes to all neighbors
 		//	CostD      map[string][2]int
